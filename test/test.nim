@@ -1,3 +1,17 @@
+#
+#
+#                     Nimrod Runtime Library 
+#                   for Serialization Using the 
+#                       Hessian Protocol
+#
+#                  (c) Copyright 2011 Tom Krauss
+#
+#
+# This is a test driver for the Hessen seriaqlization module.
+# Running it should test the various edge cases for the Hessian
+# encoding.
+#
+
 import
   strutils,
   streams,
@@ -12,6 +26,9 @@ const
 ######
 # Internal functions to "pretty print" encoded values
 #
+proc i2s(x: char): string {.procvar.} = 
+  result = "0x" & toHex( int(x), 2 )
+  
 proc i2s(x: int): string {.procvar.} = 
   result = $x
 
@@ -21,9 +38,14 @@ proc f2s(x: float): string {.procvar.} =
 proc i2s(x: byte): string {.procvar.} = 
   result = "0x" & toHex(x,2)
 
-proc showBytes(x: seq[byte]): string =
-  var strList = each(x, i2s)
-  result = "[" & join(strList, ",") & "]"
+proc showBytes(x: string): string =
+  #var strList = each(x, i2s)
+  result = "["
+  for i in 0..len(x)-1:
+    result = result & i2s(x[i])
+    if i<len(x)-1:
+      result = result & ", "
+  result = result & "]"
 
 proc showList(x: openarray[int]): string =
   var strList = each(x, i2s)
@@ -54,8 +76,8 @@ proc checkit(v: int) =
 proc checkit(v: int64) =
   var res = encode(v)
   var numPadded: string = align($v, padLength)
-  var check: int
-  discard decodeInteger(res, 0, check)
+  var check: int64
+  discard decodeLongInteger(res, 0, check)
   echo(numPadded & " -> " & showBytes(res) & " -> " & $check)
 
 proc checkit(v: float, asDouble=false) =
@@ -109,7 +131,7 @@ checkit(2047)
 checkit(-262144)
 checkit(262143)
 checkit(2621430)
-checkit(2147483648)
+checkit(2147483649'i64)
 echo()
 
 echo("Checking floats...")

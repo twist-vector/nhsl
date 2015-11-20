@@ -104,17 +104,6 @@ proc encode*(value: int64, compact: bool=true, width: int8= -1): string =
     result[1] = cast[char](y[2])
     result[2] = cast[char](y[3])
 
-  elif value >= -2147483648 and value <= 2147483647 and (compact or width==4):
-    # 32-bit signed
-    result = newString(5)
-    var temp: int32 = htonl(int32(value))
-    var y = cast[cstring](addr(temp))
-    result[0] = '\x4c'
-    result[1] = cast[char](y[0])
-    result[2] = cast[char](y[1])
-    result[3] = cast[char](y[2])
-    result[4] = cast[char](y[3])
-
   else:
     # Otherwise we're stuck using the full 8 bytes
     result = newString(9)
@@ -141,24 +130,26 @@ proc encode*(value: int64, compact: bool=true, width: int8= -1): string =
       result[8] = cast[char](y[7])
 
 
-proc encode*(value: float): string =
+proc encode*(value: float, compact: bool=true, width: int8= -1): string =
   ## Encodes a floating point (double) value into a string in the compact form.
-  if value == 0.0:
+  if value == 0.0 and (compact or width==1):
     result = newString(1)
     result[0] = char(0x5b'i8)
 
-  elif value == 1.0:
+  elif value == 1.0 and (compact or width==1):
     result = newString(1)
     result[0] = char(0x5c'i8)
 
-  elif value >= -128.0 and value <= 127.0 and (float(round(value))==value):
+  elif value >= -128.0 and value <= 127.0 and
+            (float(round(value))==value) and (compact or width==2):
     # two-octet
     result = newString(2)
     var temp: int8 = int8(value)
     result[0] = char(0x5d'i8)
     result[1] = cast[char](temp)
 
-  elif value >= -32768.0 and value <= 32767.0  and (float(round(value))==value):
+  elif value >= -32768.0 and value <= 32767.0 and
+            (float(round(value))==value)  and (compact or width==3):
     # three-octet
     result = newString(3)
     var temp: int16 = htons(int16(value))
@@ -240,7 +231,8 @@ proc encode*(value: openarray[float], asDouble: bool = false): string =
 #
 
 proc decodeBool*(buffer: string, start: int, value: var bool): int =
-  ## Extracts an encoded boolean value from the string.
+  ## Extracts an encoded boolean value from the string.  Returns the number
+  ## of bytes consumed extracting the data.
   var code: int = int(buffer[start])
   case code
   of 0x46:
@@ -257,7 +249,8 @@ proc decodeBool*(buffer: string, start: int, value: var bool): int =
 
 
 proc decodeInteger*(buffer: string, start: int, value: var int): int =
-  ## Extracts an encoded integer value from the char buffer.
+  ## Extracts an encoded integer value from the char buffer.  Returns the number
+  ## of bytes consumed extracting the data.
   var code: int = int(buffer[start])
   case code
   of 0x80..0xbf:
@@ -283,6 +276,17 @@ proc decodeInteger*(buffer: string, start: int, value: var int): int =
     value  = (b3 shl 24) + (b2 shl 16) + (b1 shl 8) + b0
     result = 5
 
+  else:
+    var e: ref OSError
+    new(e)
+    e.msg = "Unable to read integer from buffer.  Found code: " &  i2h(code)
+    raise e
+
+
+proc decodeLongInteger*(buffer: string, start: int, value: var int64): int =
+  ## Extracts an encoded long integer value from the char buffer.
+  var code: int = int(buffer[start])
+  case code
   of 0xd8..0xef:
     value  = code - 0xe0
     result = 1
@@ -298,41 +302,19 @@ proc decodeInteger*(buffer: string, start: int, value: var int): int =
     value  = ((code - 0x3c) shl 16) + (b1 shl  8) + b0
     result = 3
 
-
-  else:
-    var e: ref OSError
-    new(e)
-    e.msg = "Unable to read integer from buffer.  Found code: " &  i2h(code)
-    raise e
-
-
-proc decodeLongInteger*(buffer: string, start: int, value: var int64): int =
-  ## Extracts an encoded long integer value from the char buffer.
-  var code: int = int(buffer[start])
-  case code
-  of 0x4c:
-    var temp: int64
-    var y = cast[cstring](addr(temp))
-    if cpuEndian==littleEndian:
-      y[7] = buffer[start+1]
-      y[6] = buffer[start+2]
-      y[5] = buffer[start+3]
-      y[4] = buffer[start+4]
-      y[3] = buffer[start+5]
-      y[2] = buffer[start+6]
-      y[1] = buffer[start+7]
-      y[0] = buffer[start+8]
-    else:
-      y[0] = buffer[start+1]
-      y[1] = buffer[start+2]
-      y[2] = buffer[start+3]
-      y[3] = buffer[start+4]
-      y[4] = buffer[start+5]
-      y[5] = buffer[start+6]
-      y[6] = buffer[start+7]
-      y[7] = buffer[start+8]
-    value  = int64(temp)
+  of int('L'):
+    var b7 = int(buffer[start+1])
+    var b6 = int(buffer[start+2])
+    var b5 = int(buffer[start+3])
+    var b4 = int(buffer[start+4])
+    var b3 = int(buffer[start+1])
+    var b2 = int(buffer[start+2])
+    var b1 = int(buffer[start+3])
+    var b0 = int(buffer[start+4])
+    value = (b7 shl 48) + (b6 shl 40) + (b5 shl 32) + b4 +
+            (b3 shl 24) + (b2 shl 16) + (b1 shl 8) + b0
     result = 9
+
   else:
     var e: ref OSError
     new(e)
@@ -345,20 +327,20 @@ proc decodeFloat*(buffer: string, start: int, value: var float): int =
 
   var code: int = int(buffer[start])
   case code
-  of 0x67:
+  of 0x5b:
     value  = 0.0
     result = 1
 
-  of 0x68:
+  of 0x5c:
     value  = 1.0
     result = 1
 
-  of 0x69:
+  of 0x5d:
     # Double as byte
     value  = float(cast[int8](buffer[start+1]))
     result = 2
 
-  of 0x6a:
+  of 0x5e:
     # Double as short
     var temp: int16
     var y = cast[cstring](addr(temp))
@@ -435,25 +417,24 @@ proc decodeIntList*(buffer: string, start: int, value: var seq[int]): int =
   ## Extracts an encoded list of integers (vector) value from the char buffer.
 
   var code: int = int(buffer[start])
-  var offset: int = 1
+  var numBytes = 0
   case code
-  of 0x56:
-    # Not actually verifying the type code here
-    #var typeCode: int = int(buffer[start+offset])
-    offset = offset + 1
+  of int('V'):
+    numBytes += 1
+
+    var elemType: string
+    numBytes += decodeString(buffer, numBytes, elemType)
 
     var length: int
-    offset = offset + decodeInteger(buffer, start+offset, length)
+    numBytes += decodeInteger(buffer, numBytes, length)
 
     newSeq(value, length)
     for i in 0..length-1:
       var temp: int
-      offset = offset + decodeInteger(buffer, start+offset, temp)
+      numBytes += decodeInteger(buffer, numBytes, temp)
       value[i] = temp
-    # Strip of ending 'z'
-    offset = offset + 1
 
-    result = offset
+    result = numBytes
 
   else:
     var e: ref OSError
@@ -467,25 +448,24 @@ proc decodeFloatList*(buffer: string, start: int, value: var seq[float]): int =
   ## Extracts an encoded list of floats (vector) value from the char buffer.
 
   var code: int = int(buffer[start])
-  var offset: int = 1
+  var numBytes = 0
   case code
-  of 0x56:
-    # Not actually verifying the type code here
-    #var typeCode: int = int(buffer[start+offset])
-    offset = offset + 1
+  of int('V'):
+    numBytes += 1
+
+    var elemType: string
+    numBytes += decodeString(buffer, numBytes, elemType)
 
     var length: int
-    offset = offset + decodeInteger(buffer, start+offset, length)
+    numBytes += decodeInteger(buffer, numBytes, length)
 
     newSeq(value, length)
     for i in 0..length-1:
       var temp: float
-      offset = offset + decodeFloat(buffer, start+offset, temp)
+      numBytes += decodeFloat(buffer, numBytes, temp)
       value[i] = temp
-    # Strip of ending 'z'
-    offset = offset + 1
 
-    result = offset
+    result = numBytes
 
   else:
     var e: ref OSError
@@ -534,14 +514,9 @@ when isMainModule:
   assert encode(0'i64, width=3, compact=false) == "\x3c\x00\x00"
   assert encode(-262144'i64) == "\x38\x00\x00"
   assert encode(262143'i64) == "\x3f\xff\xff"
-  # 4 byte
-  assert encode(0'i64, width=4, compact=false) == "\x4c\x00\x00\x00\x00"
-  assert encode(300'i64, width=4, compact=false) == "\x4c\x00\x00\x01\x2c"
-
   # Long non-compact form (8 bytes plus leading 'L') checks
   assert encode(0'i64, compact=false) == "L\x00\x00\x00\x00\x00\x00\x00\x00"
   assert encode(300'i64, compact=false) == "L\x00\x00\x00\x00\x00\x00\x01\x2c"
-
 
 
   # Double compact form checks
@@ -567,3 +542,143 @@ when isMainModule:
   # Array checks
   assert encode([1,2,3]) == "V\x03int\x93\x91\x92\x93"  # ints
   assert encode([1.0,2.0,3.0]) == "V\x05float\x93\x5c\x5d\x02\x5d\x03" # floats
+
+
+
+  var numBytes:int
+
+  # Boolean decode checks
+  var valTrue, valFalse: bool
+  numBytes = decodeBool( encode(true), 0, valTrue )
+  assert valTrue
+  assert numBytes==1
+  numBytes = decodeBool( encode(false), 0, valFalse )
+  assert (not valFalse)
+  assert numBytes==1
+
+  # Int decode checks
+  # 1 byte
+  var intVal: int
+  numBytes = decodeInteger( encode(0), 0, intVal )
+  assert intVal == 0
+  assert numBytes == 1
+  numBytes = decodeInteger( encode(-16), 0, intVal )
+  assert intVal == -16
+  assert numBytes == 1
+  numBytes = decodeInteger( encode(47), 0, intVal )
+  assert intVal == 47
+  assert numBytes == 1
+  # 2 bytes
+  numBytes = decodeInteger( encode(-2048), 0, intVal )
+  assert intVal == -2048
+  assert numBytes == 2
+  numBytes = decodeInteger( encode(-256), 0, intVal )
+  assert intVal == -256
+  assert numBytes == 2
+  numBytes = decodeInteger( encode(2047), 0, intVal )
+  assert intVal == 2047
+  assert numBytes == 2
+  # 3 byte
+  numBytes = decodeInteger( encode(-262144), 0, intVal )
+  assert intVal == -262144
+  assert numBytes == 3
+  numBytes = decodeInteger( encode(262143), 0, intVal )
+  assert intVal == 262143
+  assert numBytes == 3
+  # Non-compact form
+  numBytes = decodeInteger( encode(0, compact=false), 0, intVal )
+  assert intVal == 0
+  assert numBytes == 5
+  numBytes = decodeInteger( encode(300, compact=false), 0, intVal )
+  assert intVal == 300
+  assert numBytes == 5
+
+
+  # 64-bit integer compact form checks
+  var longIntVal: int64
+  # 1 byte
+  numBytes = decodeLongInteger( encode(0'i64), 0, longIntVal )
+  assert longIntVal == 0
+  assert numBytes == 1
+  # 2 byte
+  numBytes = decodeLongInteger( encode(0'i64, width=2, compact=false), 0, longIntVal )
+  assert longIntVal == 0
+  assert numBytes == 2
+  numBytes = decodeLongInteger( encode(-2048'i64), 0, longIntVal )
+  assert longIntVal == -2048
+  assert numBytes == 2
+  numBytes = decodeLongInteger( encode(-256'i64), 0, longIntVal )
+  assert longIntVal == -256
+  assert numBytes == 2
+  numBytes = decodeLongInteger( encode(2047'i64), 0, longIntVal )
+  assert longIntVal == 2047
+  assert numBytes == 2
+  # 3 byte
+  numBytes = decodeLongInteger( encode(0'i64, width=3, compact=false), 0, longIntVal )
+  assert longIntVal == 0
+  assert numBytes == 3
+  numBytes = decodeLongInteger( encode(-262144'i64), 0, longIntVal )
+  assert longIntVal == -262144
+  assert numBytes == 3
+  numBytes = decodeLongInteger( encode(262143'i64), 0, longIntVal )
+  assert longIntVal == 262143
+  assert numBytes == 3
+  # Long non-compact form (8 bytes plus leading 'L') checks
+  numBytes = decodeLongInteger( encode(300'i64, compact=false), 0, longIntVal )
+  assert longIntVal == 0
+  assert numBytes == 9
+  #assert encode(300'i64, compact=false) == "L\x00\x00\x00\x00\x00\x00\x01\x2c"
+
+  # Double checks
+  var floatVal: float
+  # 1 byte
+  numBytes = decodeFloat( encode(0.0), 0, floatVal )
+  assert floatVal == 0.0
+  assert numBytes == 1
+  numBytes = decodeFloat( encode(1.0), 0, floatVal )
+  assert floatVal == 1.0
+  assert numBytes == 1
+  # 2 byte
+  numBytes = decodeFloat( encode(-128.0), 0, floatVal )
+  assert floatVal == -128.0
+  assert numBytes == 2
+  numBytes = decodeFloat( encode(127.0), 0, floatVal )
+  assert floatVal == 127.0
+  assert numBytes == 2
+  # 3 bytes
+  numBytes = decodeFloat( encode(-32768.0), 0, floatVal )
+  assert floatVal == -32768.0
+  assert numBytes == 3
+  numBytes = decodeFloat( encode(32767.0), 0, floatVal )
+  assert floatVal == 32767.0
+  assert numBytes == 3
+  # Non-compact, 9 bytes
+  numBytes = decodeFloat( encode(0.0, compact=false), 0, floatVal )
+  assert floatVal == 0.0
+  assert numBytes == 9
+  numBytes = decodeFloat( encode(12.25, compact=false), 0, floatVal )
+  assert floatVal == 12.25
+  assert numBytes == 9
+
+
+  # String checks
+  var stringValue: string
+  numbytes = decodeString( encode(""), 0, stringValue )
+  assert stringValue == ""
+  assert numBytes == 1
+  # Decode of unicode fails.  Not sure Hessian spec is correct or we're
+  # mis-interpreting it.
+  # numbytes = decodeString( encode("Ã"), 0, stringValue)
+  # assert stringValue == "Ã"
+  # assert numBytes == 1
+
+
+  # List checks
+  # Integer
+  var intListValue: seq[int]
+  numBytes = decodeIntList( encode([1,2,3]), 0, intListValue )
+  assert intListValue == @[1,2,3]
+  assert numBytes == 9
+  # Float
+  var floatListValue: seq[float]
+  numBytes = decodeFloatList( encode([1.0,2.0,3.0]), 0, floatListValue )

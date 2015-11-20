@@ -1,7 +1,7 @@
 #
 #
-#                     Nimrod Runtime Library 
-#                   for Serialization Using the 
+#                     Nimrod Runtime Library
+#                   for Serialization Using the
 #                       Hessian Protocol
 #
 #                  (c) Copyright 2011 Tom Krauss
@@ -15,6 +15,7 @@
 import
   strutils,
   streams,
+  sequtils,
   hessian
 
 
@@ -26,17 +27,17 @@ const
 ######
 # Internal functions to "pretty print" encoded values
 #
-proc i2s(x: char): string {.procvar.} = 
+proc i2s(x: char): string {.procvar.} =
   result = "0x" & toHex( int(x), 2 )
-  
-proc i2s(x: int): string {.procvar.} = 
+
+proc i2s(x: int): string {.procvar.} =
   result = $x
 
-proc f2s(x: float): string {.procvar.} = 
+proc f2s(x: float): string {.procvar.} =
   result = formatFloat(x, precision=2)
 
-proc i2s(x: byte): string {.procvar.} = 
-  result = "0x" & toHex(x,2)
+proc i2s(x: byte): string {.procvar.} =
+  result = "0x" & toHex(int(x),2)
 
 proc showBytes(x: string): string =
   #var strList = each(x, i2s)
@@ -48,11 +49,11 @@ proc showBytes(x: string): string =
   result = result & "]"
 
 proc showList(x: openarray[int]): string =
-  var strList = each(x, i2s)
+  var strList = map(x, i2s)
   result = "[" & join(strList, ",") & "]"
 
 proc showList(x: openarray[float]): string =
-  var strList = each(x, f2s)
+  var strList = map(x, f2s)
   result = "[" & join(strList, ",") & "]"
 
 ######
@@ -80,8 +81,8 @@ proc checkit(v: int64) =
   discard decodeLongInteger(res, 0, check)
   echo(numPadded & " -> " & showBytes(res) & " -> " & $check)
 
-proc checkit(v: float, asDouble=false) =
-  var res = encode(v, asDouble=asDouble)
+proc checkit(v: float) =
+  var res = encode(v)
   var numPadded: string = align(formatFloat(v, precision=6), padLength)
   var check: float
   discard decodeFloat(res, 0, check)
@@ -110,7 +111,7 @@ proc checkit(v: openarray[float], asDouble=false) =
   echo(numPadded & " -> " & showBytes(res) & " -> " & showList(check))
 
 ######
-# Here's where we'll actual drive the encode/decode routines.  We'll try to test 
+# Here's where we'll actual drive the encode/decode routines.  We'll try to test
 # the "edge cases" as well as some more mundane values.
 #
 echo()
@@ -131,7 +132,17 @@ checkit(2047)
 checkit(-262144)
 checkit(262143)
 checkit(2621430)
-checkit(2147483649'i64)
+echo()
+
+echo("Checking long integers...")
+checkit(0'i64)
+checkit(-8'i64)
+checkit(-2048'i64)
+checkit(-256'i64)
+checkit(2047'i64)
+checkit(-262144'i64)
+checkit(262143'i64)
+checkit(2621430'i64)
 echo()
 
 echo("Checking floats...")
@@ -142,8 +153,8 @@ checkit(-2.0)
 checkit(-32768.0)
 checkit(32767.0)
 checkit(12.25)
-checkit(1.2345,asDouble=false)
-checkit(1.2345,asDouble=true)
+checkit(1.2345)
+checkit(1.2345)
 echo()
 
 echo("Checking strings...")
@@ -153,5 +164,4 @@ echo()
 echo("Checking lists...")
 checkit([1, 2, 3, 4, 5])
 checkit([-1, -2, -3])
-checkit([1.1, 2.2, 3.3], asDouble=false)
-
+checkit([1.1, 2.2, 3.3])

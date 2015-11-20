@@ -1,7 +1,7 @@
 #
 #
-#                     Nimrod Runtime Library 
-#                   for Serialization Using the 
+#                     Nimrod Runtime Library
+#                   for Serialization Using the
 #                       Hessian Protocol
 #
 #                  (c) Copyright 2011 Tom Krauss
@@ -20,7 +20,7 @@ import
   strutils,
   streams,
   hessian
-  
+
 
 const
   testFilename: string = "test_binary.dat"
@@ -28,14 +28,13 @@ const
 
 ###############################################################
 # Open the test file and read in all the binary data
-var FID: TFile
+var FID: File
 var status = open(FID, testFilename, fmRead)
 if not status:
   echo("Failed to open binary Hessian test file "&testFilename)
   echo("Please ensure the file is in this directory and re-run")
   quit(1)
-var buffer: array[0..2*1024, byte]
-discard ReadBytes(FID, buffer, 0, len(buffer))
+var buffer = readAll(FID)
 close(FID)
 
 var offset: int = 0
@@ -84,26 +83,27 @@ stdout.write("OK\n")
 
 # Longs
 stdout.write("Reading long values... ")
+var longValue: int64
 try:
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == 0)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == -8)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == 15)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == -2048)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == -256)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == 2047)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == -262144)
-  offset = offset + hessian.decodeInteger(buffer, offset, intValue)
-  assert(intValue == 262143)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == 0)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == -8)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == 15)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == -2048)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == -256)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == 2047)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == -262144)
+  offset = offset + hessian.decodeLongInteger(buffer, offset, longValue)
+  assert(longValue == 262143)
 except:
-  stdout.write("FAILED\n")
-  quit()
+ stdout.write("FAILED\n")
+ quit()
 stdout.write("OK\n")
 
 
@@ -126,10 +126,7 @@ try:
   offset = offset + hessian.decodeFloat(buffer, offset, floatValue)
   assert(floatValue == 32767.0)
   offset = offset + hessian.decodeFloat(buffer, offset, floatValue)
-  try:
-    assert(floatValue == 12.25)
-  except:
-    # This is known to fail.  Error in writer?
+  assert(floatValue == 12.25)
   offset = offset + hessian.decodeFloat(buffer, offset, floatValue)
   assert(floatValue == 214.3)
 except:
@@ -158,13 +155,12 @@ var list: seq[int]
 var list_correct: seq[int] = @[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 var list2: seq[float]
 var list2_correct: seq[float] = @[-12345.67, -1.1, 0.0, 1.1, 23456.78]
+
 try:
   offset = offset + decodeIntList(buffer, offset, list)
+  assert list == list_correct
   offset = offset + decodeFloatList(buffer, offset, list2)
-  for i in 0..len(list_correct)-1:
-    assert(list[i] == list_correct[i])
-  for i in 0..len(list2_correct)-1:
-    assert(list2[i] == list2_correct[i])
+  assert list2 == list2_correct
 except:
   stdout.write("FAILED\n")
   quit()
@@ -173,4 +169,3 @@ stdout.write("OK\n")
 echo()
 echo("If you see this all the data has been successfully read!")
 echo()
-

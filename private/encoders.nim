@@ -154,13 +154,13 @@ proc encode*(str: string, compact=true): string =
   ## Encodes a string value into a string.
   if len(str) <= 32 and compact:
     result = newString(len(str)+1)
-    result[0] = cast[char](int8(runeLen(str)))
+    result[0] = cast[char](int8(len(str)))
     for i in 0..len(str)-1:
       result[i+1] = str[i]
 
   elif len(str) <= 32767:
     result = newString(len(str)+3)
-    var temp: int16 = htons(int16(runeLen(str)))
+    var temp: int16 = htons(int16(len(str)))
     var y = cast[cstring](addr(temp))
     result[0] = 'S'
     result[1] = cast[char](y[0])
@@ -183,7 +183,7 @@ proc encode*(value: openarray[float], asDouble: bool = false): string =
   ## Encodes a list of floats into a string.
   result = newString(1)
   result[0] = 'V'
-  result = result & encode("float")
+  result = result & encode("flt")
   result = result & $( encode(len(value)) )
   for v in items(value):
     result = result & $( encode(v) )

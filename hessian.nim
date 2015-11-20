@@ -28,9 +28,20 @@
 import
   nativesockets,
   math,
-  unicode
+  unicode,
+  times
 
 
 include "private/utils"
 include "private/encoders"
 include "private/decoders"
+
+
+when isMainModule:
+  var t = getTime()
+  echo "t: ", t
+  var ts: string = encode(t, compact=false)
+  echo "ts: ", ts
+  var t2: Time
+  var numBytes = decodeTime(ts, 0, t2)
+  echo "t2: ", t2

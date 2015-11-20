@@ -255,3 +255,30 @@ proc decodeFloatList*(buffer: string, start: int, value: var seq[float]): int =
     new(e)
     e.msg = "Unable to read float vector from buffer.  Found code: " &  i2h(code)
     raise e
+
+
+proc decodeTime*(buffer: string, start: int, value: var Time): int =
+  var code = buffer[start]
+  var numBytes = start
+  case code
+  of '\x4b':
+    var buffdup = buffer
+    buffdup[start] = '\x49' # make it look like an int32 so we can re-use decoder
+    var tMins: int
+    numBytes += decodeInteger(buffdup,start,tMins)
+    value = fromSeconds( float(tMins)*60.0 )
+    result = numBytes-start
+
+  of '\x4a':
+    var buffdup = buffer
+    buffdup[start] = '\x4c' # make it look like an int64 so we can re-use decoder
+    var tMilli: int64
+    numBytes += decodeLongInteger(buffdup,start,tMilli)
+    value = fromSeconds( float(tMilli)/1000.0 )
+    result = numBytes-start
+
+  else:
+    var e: ref OSError
+    new(e)
+    e.msg = "Unable to read time from buffer.  Found code: " &  i2h(int(code))
+    raise e

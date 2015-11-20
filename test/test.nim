@@ -16,11 +16,12 @@ import
   strutils,
   streams,
   sequtils,
+  times,
   hessian
 
 
 const
-  padLength: int = 14
+  padLength: int = 30
 
 
 
@@ -110,6 +111,13 @@ proc checkit(v: openarray[float], asDouble=false) =
   discard decodeFloatList(res, 0, check)
   echo(numPadded & " -> " & showBytes(res) & " -> " & showList(check))
 
+proc checkit(v: Time, compact: bool=true) =
+  var res = encode(v, compact)
+  var numPadded: string = align($v, padLength)
+  var check: Time
+  discard decodeTime(res, 0, check)
+  echo(numPadded & " -> " & showBytes(res) & " -> " & $check)
+
 ######
 # Here's where we'll actual drive the encode/decode routines.  We'll try to test
 # the "edge cases" as well as some more mundane values.
@@ -161,7 +169,13 @@ echo("Checking strings...")
 checkit("Hello world")
 echo()
 
-echo("Checking lists...")
-checkit([1, 2, 3, 4, 5])
-checkit([-1, -2, -3])
-checkit([1.1, 2.2, 3.3])
+# echo("Checking lists...")
+# checkit([1, 2, 3, 4, 5])
+# checkit([-1, -2, -3])
+# checkit([1.1, 2.2, 3.3])
+# echo()
+
+echo("Checking times...")
+checkit(getTime(), compact=true)
+checkit(getTime(), compact=false)
+echo()

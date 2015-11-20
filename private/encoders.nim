@@ -187,3 +187,19 @@ proc encode*(value: openarray[float], asDouble: bool = false): string =
   result = result & $( encode(len(value)) )
   for v in items(value):
     result = result & $( encode(v) )
+
+
+proc encode*(time: Time, compact: bool=true): string =
+  # Seconds since Unix epoch (as float)
+  var seconds = toSeconds(time)
+
+  if compact:
+    let minutes: int32 = int32(seconds/60.0)
+    var preencode: string = encode(minutes, compact=false)
+    result = preencode
+    result[0] = '\x4b'
+  else:
+    let millisec: int64 = int64(seconds*1000.0)
+    var preencode: string = encode(millisec, compact=false)
+    result = preencode
+    result[0] = '\x4a'
